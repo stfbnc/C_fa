@@ -1,7 +1,7 @@
 #include "includes.h"
 
-int main(int argc, char **argv){
-    
+int main(int argc, char **argv)
+{
     //args
     int L = atoi(argv[1]);
     int min_win = atoi(argv[2]);
@@ -16,8 +16,16 @@ int main(int argc, char **argv){
     MPI_Comm_size(MPI_COMM_WORLD, &size);
     //random vectors and dcca
     double *vec1, *vec2;
-    vec1 = malloc(L * sizeof(double));
-    vec2 = malloc(L * sizeof(double));
+    vec1 = calloc(L, sizeof(double));
+    if(!vec1){
+        printf("MALLOC ERROR (vec1)\n");
+        return 99;
+    }
+    vec2 = calloc(L, sizeof(double));
+    if(!vec2){
+        printf("MALLOC ERROR (vec2)\n");
+        return 99;
+    }
     if(rank == 0){
         printf("STARTING SIMULATION\n\n");
         system("if [ -e rho_mtx.txt ]; then rm rho_mtx.txt; fi");
@@ -45,5 +53,4 @@ int main(int argc, char **argv){
     //finalization
     MPI_Finalize();
     return 0;
-    
 }
