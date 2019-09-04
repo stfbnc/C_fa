@@ -4,4 +4,3 @@ double mean(double *, int, int);
 void cumsum(double *, double *, int);
 void slice_vec(double *, double *, int, int);
 int lin_fit(int, const double *, const double *, double *, double *, double *);
-void zero_vec(double *, int);
