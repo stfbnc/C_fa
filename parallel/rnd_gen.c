@@ -1,11 +1,13 @@
 #include "includes.h"
 
-void gauss_rand_vec(int N, double *vec, double mean, double stddev){
+void gauss_rand_vec(int N, double *vec, double mean, double stddev)
+{
     for(int i = 0; i < N; i++)
-        *(vec + i) = rand_normal(mean, stddev);
+        vec[i] = rand_normal(mean, stddev);
 }
 
-double rand_normal(double mean, double stddev){//Box muller method
+double rand_normal(double mean, double stddev)
+{//Box muller method
     static double n2 = 0.0;
     static int n2_cached = 0;
     if(!n2_cached){
