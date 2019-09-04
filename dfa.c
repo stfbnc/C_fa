@@ -1,6 +1,13 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <math.h>
+#include <string.h>
+
+//DEFINES
+#define SUCCESS 1
+#define FAILURE -1
+#define PROGRESS "===================="
+#define PRG_WIDTH 20
 
 //FUNCTIONS DECLARATION
 int rows_number(char *);
@@ -8,84 +15,135 @@ double mean(double *, int);
 void cumsum(double *, double *, int);
 void slice_vec(double *, double *, int, int);
 int lin_fit(int, const double *, const double *, double *, double *, double *);
-void concatenate(double *, double *, double *, int);
-void vec_copy(double *, double *, int);
-void zero_vec(double *, int);
 
 //MAIN
-int main(int argc, char **argv){
-    
+int main(int argc, char **argv)
+{
+    //inputs
     int input_args = 6;
     if(argc < input_args){
         printf("Not enough input arguments!\n");
-        return 99;
+        return FAILURE;
     }else if(argc > input_args){
         printf("Too many input arguments!\n");
-        return 99;
+        return FAILURE;
     }
     char file_name[255];
+    memset(file_name, 0x00, sizeof(file_name));
     sprintf(file_name, "%s", argv[1]);
     int min_win = atoi(argv[2]);
     int ord = atoi(argv[3]);
     int rev_seg = atoi(argv[4]);
     char path_tot[255];
-    sprintf(path_tot, "%s/dfa.txt", argv[5]);
+    memset(path_tot, 0x00, sizeof(path_tot));
+    sprintf(path_tot, "%s/dfa_mw=%d_pol=%d_bck=%d.txt", argv[5], min_win, ord, rev_seg);
     //file length
     int N = rows_number(file_name);
+    if(N == FAILURE){
+        printf("Cannot open input file.\n");
+        return FAILURE;
+    }
     //time series
     double *pn;
-    pn = malloc(N * sizeof(double));
+    pn = calloc(N, sizeof(double));
+    if(!pn){
+        printf("MALLOC ERROR (pn)\n");
+        return FAILURE;
+    }
     FILE *f;
     f = fopen(file_name, "r");
-    for(int i = 0; i < N; i++){
-        fscanf(f, "%lf", pn + i);
+    if(!f){
+        printf("Cannot open input file.\n");
+        return FAILURE;
     }
+    for(int i = 0; i < N; i++)
+        fscanf(f, "%lf", pn+i);
     fclose(f);
+    printf("Data length: <%d>\n", N);
     //time vector
     double *t;
-    t = malloc(N * sizeof(double));
-    for(int i = 0; i < N; i++){
-        *(t + i) = (double)(i + 1);
+    t = calloc(N, sizeof(double));
+    if(!t){
+        printf("MALLOC ERROR (t)\n");
+        return FAILURE;
     }
+    for(int i = 0; i < N; i++)
+        t[i] = (double)(i+1);
     //time series minus its mean
     double a_ave = mean(pn, N);
     double *pn_nomean;
-    pn_nomean = malloc(N * sizeof(double));
+    pn_nomean = calloc(N, sizeof(double));
+    if(!pn_nomean){
+        printf("MALLOC ERROR (pn_nomean)\n");
+        return FAILURE;
+    }
     for(int i = 0; i < N; i++)
-        *(pn_nomean + i) = *(pn + i) - a_ave;
+        pn_nomean[i] = pn[i] - a_ave;
     //cumulative sum
     double *y;
-    y = malloc(N * sizeof(double));
+    y = calloc(N, sizeof(double));
+    if(!y){
+        printf("MALLOC ERROR (y)\n");
+        return FAILURE;
+    }
+    printf("Data integration...");
     cumsum(pn_nomean, y, N);
+    printf("done!\n");
     //defining parameters
     int max_win = 5;
     int end_dfa = N / max_win;
     int *s;
     int range_dfa = end_dfa - min_win + 1;
-    s = malloc(range_dfa * sizeof(int));
-    for(int i = 0; i < range_dfa; i++){
-        *(s + i) = i + min_win;
+    s = calloc(range_dfa, sizeof(int));
+    if(!s){
+        printf("MALLOC ERROR (s)\n");
+        return FAILURE;
     }
+    for(int i = 0; i < range_dfa; i++)
+        s[i] = i + min_win;
     //fluctuations vector and other arrays
     double *F, *F_nu1, *F_nu2, *t_fit, *y_fit, *diff_vec;
     int F_len = N / min_win;
-    F = malloc(range_dfa * sizeof(double));
-    F_nu1 = malloc(F_len * sizeof(double));
-    F_nu2 = malloc(F_len * sizeof(double));
-    t_fit = malloc(end_dfa * sizeof(double));
-    y_fit = malloc(end_dfa * sizeof(double));
-    diff_vec = malloc(end_dfa * sizeof(double));
+    F = calloc(range_dfa, sizeof(double));
+    if(!F){
+        printf("MALLOC ERROR (F)\n");
+        return FAILURE;
+    }
+    F_nu1 = calloc(F_len, sizeof(double));
+    if(!F_nu1){
+        printf("MALLOC ERROR (F_nu1)\n");
+        return FAILURE;
+    }
+    F_nu2 = calloc(F_len, sizeof(double));
+    if(!F_nu2){
+        printf("MALLOC ERROR (F_nu2)\n");
+        return FAILURE;
+    }
+    t_fit = calloc(end_dfa, sizeof(double));
+    if(!t_fit){
+        printf("MALLOC ERROR (t_fit)\n");
+        return FAILURE;
+    }
+    y_fit = calloc(end_dfa, sizeof(double));
+    if(!y_fit){
+        printf("MALLOC ERROR (y_fit)\n");
+        return FAILURE;
+    }
+    diff_vec = calloc(end_dfa, sizeof(double));
+    if(!diff_vec){
+        printf("MALLOC ERROR (diff_vec)\n");
+        return FAILURE;
+    }
     //computation
-    int N_s;
     int start_lim, end_lim;
     double ang_coeff, intercept, r_coeff;
     for(int i = 0; i < range_dfa; i++){
-        N_s = N / s[i];
-        zero_vec(F_nu1, F_len);
+        int N_s = N / s[i];
+        double perc = i * 100 / (double)range_dfa;
+        int prg = (i * PRG_WIDTH) / range_dfa;
+        printf("Computing fluctuations => [%.*s%*s] %.2lf%%\r", prg, PROGRESS, PRG_WIDTH-prg, "", perc);
+        fflush(stdout);
         for(int v = 0; v < N_s; v++){
-            zero_vec(t_fit, end_dfa);
-            zero_vec(y_fit, end_dfa);
-            zero_vec(diff_vec, end_dfa);
             start_lim = v * s[i];
             end_lim = (v + 1) * s[i] - 1;
             slice_vec(t, t_fit, start_lim, end_lim);
@@ -96,11 +154,7 @@ int main(int argc, char **argv){
             F_nu1[v] = mean(diff_vec, s[i]);
         }
         if(rev_seg == 1){
-            zero_vec(F_nu2, F_len);
             for(int v = 0; v < N_s; v++){
-                zero_vec(t_fit, end_dfa);
-                zero_vec(y_fit, end_dfa);
-                zero_vec(diff_vec, end_dfa);
                 start_lim = v * s[i] + (N - N_s * s[i]);
                 end_lim = (v + 1) * s[i] + (N - N_s * s[i]);
                 slice_vec(t, t_fit, start_lim, end_lim);
@@ -115,41 +169,56 @@ int main(int argc, char **argv){
             F[i] = sqrt(mean(F_nu1, N_s));
         }
     }
-    free(F_nu1);
-    free(F_nu2);
-    free(t_fit);
-    free(y_fit);
+    printf("Computing fluctuations => [%s] 100.00%%\r", PROGRESS);
+    fflush(stdout);
+    printf("\n");
+    free(F_nu1); free(F_nu2);
+    free(t_fit); free(y_fit);
     free(diff_vec);
     //HURST EXPONENT
+    printf("Computing hurst exponent...");
     double *log_s, *log_F, H, H_intercept, H_rcoeff;
-    log_s = (double*)malloc(range_dfa * sizeof(double));
-	if(!log_s)
-        printf("no log_s\n");
-    log_F = (double*)malloc(range_dfa * sizeof(double));
-	if(!log_F)
-        printf("no log_F\n");
+    log_s = calloc(range_dfa, sizeof(double));
+	if(!log_s){
+        printf("MALLOC ERROR (log_s)\n");
+        return FAILURE;
+    }
+    log_F = calloc(range_dfa, sizeof(double));
+    if(!log_F){
+        printf("MALLOC ERROR (log_F)\n");
+        return FAILURE;
+    }
     for(int i = 0; i < range_dfa; i++){
-        *(log_s + i) = log(s[i]);
-        *(log_F + i) = log(F[i]);
+        log_s[i] = log(s[i]);
+        log_F[i] = log(F[i]);
     }
     lin_fit(range_dfa, log_s, log_F, &H, &H_intercept, &H_rcoeff);
+    printf("done\n");
+    printf("Output file...");
     f = fopen(path_tot, "w");
+    if(!f){
+        printf("Cannot open output file.\n");
+        return FAILURE;
+    }
     for(int i = 0; i < range_dfa; i++)
-        fprintf(f, "%d %lf %lf %lf\n", s[i], F[i], H_intercept + log_s[i] * H, H);
+        fprintf(f, "%d %lf %lf %lf\n", s[i], F[i], H_intercept+log_s[i]*H, H);
     fclose(f);
-    free(F);
-	free(log_s);
-	free(log_F);
+    printf("done\n");
+    free(F); free(log_s); free(log_F);
     return 0;
-    
 }
 
 //FUNCTIONS
-int rows_number(char *file_name){
+int rows_number(char *file_name)
+{
     FILE *f;
     int stop;
     int lines = 0;
     f = fopen(file_name,"r");
+    if(!f){
+        printf("Cannot open file %s\n", file_name);
+        return FAILURE;
+    }
     while(!feof(f)){
         stop = fgetc(f);
         if(stop == '\n')
@@ -159,26 +228,30 @@ int rows_number(char *file_name){
     return lines;
 }
 
-double mean(double *vec, int L){
+double mean(double *vec, int L)
+{
     double avg = 0.0;
     for(int i = 0; i < L; i++)
-        avg += *(vec + i);
+        avg += vec[i];
     avg /= (double)L;
     return avg;
 }
 
-void cumsum(double *vec, double *sum_vec, int L){
-    *sum_vec = *vec;
+void cumsum(double *vec, double *sum_vec, int L)
+{
+    sum_vec[0] = vec[0];
     for(int i = 1; i < L; i++)
-        *(sum_vec + i) = *(sum_vec + i - 1) + *(vec + i);
+        sum_vec[i] = sum_vec[i-1] + vec[i];
 }
 
-void slice_vec(double *all_vec, double *sliced_vec, int start, int end){
-    for(int i = 0; i <= (end - start); i++)
-        *(sliced_vec + i) = *(all_vec + start + i);
+void slice_vec(double *all_vec, double *sliced_vec, int start, int end)
+{
+    for(int i = 0; i <= (end-start); i++)
+        sliced_vec[i] = all_vec[start+i];
 }
 
-int lin_fit(int L, const double *x, const double *y, double *m, double *q, double *r){
+int lin_fit(int L, const double *x, const double *y, double *m, double *q, double *r)
+{
     double sumx = 0.0;
     double sumx2 = 0.0;
     double sumxy = 0.0;
@@ -207,21 +280,4 @@ int lin_fit(int L, const double *x, const double *y, double *m, double *q, doubl
               (sumy2 - (sumy * sumy) / L));
     }
     return 0;
-}
-
-void concatenate(double *vec_to, double *vec_from1, double *vec_from2, int L){
-    for(int i = 0; i < L; i++){
-        vec_to[i] = vec_from1[i];
-        vec_to[i + L] = vec_from2[i];
-    }
-}
-
-void vec_copy(double *vec_to, double *vec_from, int L){
-    for(int i = 0; i < L; i++)
-        *(vec_to + i) = *(vec_from + i);
-}
-
-void zero_vec(double *vec, int L){
-    for(int i = 0; i < L; i++)
-        *(vec + i) = 0.0;
 }
