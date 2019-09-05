@@ -35,7 +35,10 @@ int main(int argc, char **argv)
         return 99;
     }
     if(rank == 0){
-        printf("STARTING SIMULATION\n\n");
+        printf("\n");
+        printf("===================\n");
+        printf("STARTING SIMULATION\n");
+        printf("===================\n");
         system("if [ -e rho_mtx.txt ]; then rm rho_mtx.txt; fi");
         system("touch rho_mtx.txt");
     }
@@ -48,7 +51,9 @@ int main(int argc, char **argv)
         }
         gauss_rand_vec(L, vec1, 0, 1);
         gauss_rand_vec(L, vec2, 0, 1);
-        dcca(vec1, L, vec2, L, min_win, max_win, pol, "rho.txt", rank, size);
+        int ret = dcca(vec1, L, vec2, L, min_win, max_win, pol, "rho.txt", rank, size);
+        if(ret == 99)
+            return 99;
         if(rank == 0)
             system("cat rho.txt >> rho_mtx.txt");
     }

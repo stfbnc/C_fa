@@ -1,6 +1,6 @@
 #include "includes.h"
 
-void dcca(double *ts1, int N1, double *ts2, int N2, int smallest_win_size, int biggest_win_num, int pol_ord, char *path_out, int rank, int size)
+int dcca(double *ts1, int N1, double *ts2, int N2, int smallest_win_size, int biggest_win_num, int pol_ord, char *path_out, int rank, int size)
 {
     //time series must have the same length
     int L = N1;
@@ -108,9 +108,15 @@ void dcca(double *ts1, int N1, double *ts2, int N2, int smallest_win_size, int b
             printf("MALLOC ERROR (F_rmnd_DFA_y)\n");
             return 99;
         }
-        dcca_comp(time, ts1_cum, ts2_cum, L, smallest_win_size, biggest_win_size, pol_ord, F_rmnd_DCCA, F_proc_size, size);
-        dcca_comp(time, ts1_cum, ts1_cum, L, smallest_win_size, biggest_win_size, pol_ord, F_rmnd_DFA_x, F_proc_size, size);
-        dcca_comp(time, ts2_cum, ts2_cum, L, smallest_win_size, biggest_win_size, pol_ord, F_rmnd_DFA_y, F_proc_size, size);
+        int ret = dcca_comp(time, ts1_cum, ts2_cum, L, smallest_win_size, biggest_win_size, pol_ord, F_rmnd_DCCA, F_proc_size, size);
+        if(ret == 99)
+            return 99;
+        ret = dcca_comp(time, ts1_cum, ts1_cum, L, smallest_win_size, biggest_win_size, pol_ord, F_rmnd_DFA_x, F_proc_size, size);
+        if(ret == 99)
+            return 99;
+        ret = dcca_comp(time, ts2_cum, ts2_cum, L, smallest_win_size, biggest_win_size, pol_ord, F_rmnd_DFA_y, F_proc_size, size);
+        if(ret == 99)
+            return 99;
         FILE *fOut;
         fOut = fopen(path_out, "w");
         for(int i = 0; i < (size*F_proc_size); i++){
@@ -133,9 +139,10 @@ void dcca(double *ts1, int N1, double *ts2, int N2, int smallest_win_size, int b
     free(ts1_nomean); free(ts2_nomean);
     free(ts1_cum); free(ts2_cum);
     free(F_proc);
+    return 0;
 }
 
-void dcca_comp(double *t, double *y1, double *y2, int N, int min_win_size, int last_win_len, int ord, double *F, int proc_arr_size, int proc_num)
+int dcca_comp(double *t, double *y1, double *y2, int N, int min_win_size, int last_win_len, int ord, double *F, int proc_arr_size, int proc_num)
 {
     //fluctuations vector and other arrays
     int F_len = N - min_win_size;
@@ -167,7 +174,7 @@ void dcca_comp(double *t, double *y1, double *y2, int N, int min_win_size, int l
     }
     //computation
     int s, N_s, start_lim, end_lim;
-    double ang_coeff1, intercept1, r_coeff1, ang_coeff2, intercept2, r_coeff2;
+    double ang_coeff1, intercept1, ang_coeff2, intercept2;
     for(int i = 0; i < proc_arr_size; i++){
         s = (proc_num * proc_arr_size) + i + min_win_size;
         if(s < last_win_len+1){
@@ -178,8 +185,8 @@ void dcca_comp(double *t, double *y1, double *y2, int N, int min_win_size, int l
                 slice_vec(t, t_fit, start_lim, end_lim);
                 slice_vec(y1, y_fit1, start_lim, end_lim);
                 slice_vec(y2, y_fit2, start_lim, end_lim);
-                lin_fit(s+1, t_fit, y_fit1, &ang_coeff1, &intercept1, &r_coeff1);
-                lin_fit(s+1, t_fit, y_fit2, &ang_coeff2, &intercept2, &r_coeff2);
+                lin_fit(s+1, t_fit, y_fit1, &ang_coeff1, &intercept1);
+                lin_fit(s+1, t_fit, y_fit2, &ang_coeff2, &intercept2);
                 for(int j = 0; j <= s; j++)
                     diff_vec[j] = (y_fit1[j] - (intercept1 + ang_coeff1 * t_fit[j])) * (y_fit2[j] - (intercept2 + ang_coeff2 * t_fit[j]));
                 F_nu[v] = mean(diff_vec, s+1, s-1);
@@ -190,6 +197,7 @@ void dcca_comp(double *t, double *y1, double *y2, int N, int min_win_size, int l
         }
     }
     free(F_nu); free(t_fit); free(y_fit1); free(y_fit2); free(diff_vec);
+    return 0;
 }
 
 double mean(double *vec, int vecL, int L)
@@ -214,7 +222,7 @@ void slice_vec(double *all_vec, double *sliced_vec, int start, int end)
         sliced_vec[i] = all_vec[start+i];
 }
 
-int lin_fit(int L, const double *x, const double *y, double *m, double *q, double *r)
+int lin_fit(int L, const double *x, const double *y, double *m, double *q)
 {
     double sumx = 0.0;
     double sumx2 = 0.0;
@@ -222,26 +230,19 @@ int lin_fit(int L, const double *x, const double *y, double *m, double *q, doubl
     double sumy = 0.0;
     double sumy2 = 0.0;
     for(int i = 0; i < L; i++){
-        sumx += *(x + i);
-        sumx2 += *(x + i) * *(x + i);
-        sumxy += *(x + i) * *(y + i);
-        sumy += *(y + i);
-        sumy2 += *(y + i) * *(y + i);
+        sumx += x[i];
+        sumx2 += x[i] * x[i];
+        sumxy += x[i] * y[i];
+        sumy += y[i];
+        sumy2 += y[i] * y[i];
     }
     double denom = (L * sumx2 - sumx * sumx);
     if(denom == 0){
         *m = 0;
         *q = 0;
-        if(r)
-            *r = 0;
         return 1;
     }
     *m = (L * sumxy - sumx * sumy) / denom;
     *q = (sumy * sumx2 - sumx * sumxy) / denom;
-    if(r != NULL){
-        *r = (sumxy - sumx * sumy / (double)L) /
-              sqrt((sumx2 - (sumx * sumx) / L) *
-              (sumy2 - (sumy * sumy) / L));
-    }
     return 0;
 }

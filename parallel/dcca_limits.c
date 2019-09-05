@@ -1,6 +1,6 @@
 #include "includes.h"
 
-void up_down_lims(char * file_name, int N, double alpha)
+int up_down_lims(char * file_name, int N, double alpha)
 {
     int numln = rows_number(file_name) / N; //length of every of the N simulations
     double *rho_mtx;
@@ -38,11 +38,14 @@ void up_down_lims(char * file_name, int N, double alpha)
             k++;
             rho_fixed[k] = rho_mtx[j];
         }
-		histogram_conf(rho_fixed, N, alpha, down_lim+i, up_lim+i);
+		int ret = histogram_conf(rho_fixed, N, alpha, down_lim+i, up_lim+i);
+        if(ret == 99)
+            return 99;
 		fprintf(f, "%lf %lf\n", down_lim[i], up_lim[i]);
     }
 	fclose(f);
     free(rho_mtx); free(down_lim); free(up_lim); free(rho_fixed);
+    return 0;
 }
 
 int rows_number(char *file_name)
@@ -78,7 +81,7 @@ double min(double *vec, int len)
     return m;
 }
 
-void histogram_conf(double *vec, int len, double alpha, double *left_lim, double *right_lim)
+int histogram_conf(double *vec, int len, double alpha, double *left_lim, double *right_lim)
 {
 	double min_val, max_val, bin_width;
 	double *norm_hist;
@@ -110,4 +113,5 @@ void histogram_conf(double *vec, int len, double alpha, double *left_lim, double
 	*left_lim = min_val + (idx * bin_width);
 	*right_lim = max_val - (idx * bin_width);
 	free(norm_hist);
+    return 0;
 }
