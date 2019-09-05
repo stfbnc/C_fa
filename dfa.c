@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <math.h>
 #include <string.h>
+#include <gsl/gsl_multifit.h>
 
 //DEFINES
 #define SUCCESS 1
@@ -14,7 +15,7 @@ int rows_number(char *);
 double mean(double *, int);
 void cumsum(double *, double *, int);
 void slice_vec(double *, double *, int, int);
-int lin_fit(int, const double *, const double *, double *, double *, double *);
+void polynomialFit(int obs, int degree, double *dx, double *dy, double *store);
 
 //MAIN
 int main(int argc, char **argv)
@@ -136,7 +137,12 @@ int main(int argc, char **argv)
     }
     //computation
     int start_lim, end_lim;
-    double ang_coeff, intercept, r_coeff;
+    double *fit_coeffs;
+    fit_coeffs = calloc(ord+1, sizeof(double));
+    if(!fit_coeffs){
+        printf("MALLOC ERROR (fit_coeffs)\n");
+        return FAILURE;
+    }
     for(int i = 0; i < range_dfa; i++){
         int N_s = N / s[i];
         double perc = i * 100 / (double)range_dfa;
@@ -148,9 +154,12 @@ int main(int argc, char **argv)
             end_lim = (v + 1) * s[i] - 1;
             slice_vec(t, t_fit, start_lim, end_lim);
             slice_vec(y, y_fit, start_lim, end_lim);
-            lin_fit(s[i], t_fit, y_fit, &ang_coeff, &intercept, &r_coeff);
-            for(int j = 0; j < s[i]; j++)
-                diff_vec[j] = pow((y_fit[j] - (intercept + ang_coeff * t_fit[j])), 2.0);
+            polynomialFit(s[i], ord+1, t_fit, y_fit, fit_coeffs);
+            for(int j = 0; j < s[i]; j++){
+                for(int k = 0; k < ord+1; k++)
+                    y_fit[j] -= fit_coeffs[k] * pow(t_fit[j], k);
+                diff_vec[j] = pow(y_fit[j], 2.0);
+            }
             F_nu1[v] = mean(diff_vec, s[i]);
         }
         if(rev_seg == 1){
@@ -159,9 +168,12 @@ int main(int argc, char **argv)
                 end_lim = (v + 1) * s[i] + (N - N_s * s[i]);
                 slice_vec(t, t_fit, start_lim, end_lim);
                 slice_vec(y, y_fit, start_lim, end_lim);
-                lin_fit(s[i], t_fit, y_fit, &ang_coeff, &intercept, &r_coeff);
-                for(int j = 0; j < s[i]; j++)
-                    diff_vec[j] = pow((y_fit[j] - (intercept + ang_coeff * t_fit[j])), 2.0);
+                polynomialFit(s[i], ord+1, t_fit, y_fit, fit_coeffs);
+                for(int j = 0; j < s[i]; j++){
+                    for(int k = 0; k < ord+1; k++)
+                        y_fit[j] -= fit_coeffs[k] * pow(t_fit[j], k);
+                    diff_vec[j] = pow(y_fit[j], 2.0);
+                }
                 F_nu2[v] = mean(diff_vec, s[i]);
             }
             F[i] = sqrt((mean(F_nu1, N_s) + mean(F_nu2, N_s)) / (double)2);
@@ -174,10 +186,10 @@ int main(int argc, char **argv)
     printf("\n");
     free(F_nu1); free(F_nu2);
     free(t_fit); free(y_fit);
-    free(diff_vec);
+    free(diff_vec); free(fit_coeffs);
     //HURST EXPONENT
     printf("Computing hurst exponent...");
-    double *log_s, *log_F, H, H_intercept, H_rcoeff;
+    double *log_s, *log_F, *H_fit;
     log_s = calloc(range_dfa, sizeof(double));
 	if(!log_s){
         printf("MALLOC ERROR (log_s)\n");
@@ -188,11 +200,16 @@ int main(int argc, char **argv)
         printf("MALLOC ERROR (log_F)\n");
         return FAILURE;
     }
+    H_fit = calloc(2, sizeof(double));
+    if(!H_fit){
+        printf("MALLOC ERROR (H_fit)\n");
+        return FAILURE;
+    }
     for(int i = 0; i < range_dfa; i++){
         log_s[i] = log(s[i]);
         log_F[i] = log(F[i]);
     }
-    lin_fit(range_dfa, log_s, log_F, &H, &H_intercept, &H_rcoeff);
+    polynomialFit(range_dfa, 2, log_s, log_F, H_fit);
     printf("done\n");
     printf("Output file...");
     f = fopen(path_tot, "w");
@@ -201,10 +218,10 @@ int main(int argc, char **argv)
         return FAILURE;
     }
     for(int i = 0; i < range_dfa; i++)
-        fprintf(f, "%d %lf %lf %lf\n", s[i], F[i], H_intercept+log_s[i]*H, H);
+        fprintf(f, "%d %lf %lf %lf\n", s[i], F[i], H_fit[0]+log_s[i]*H_fit[1], H_fit[1]);
     fclose(f);
     printf("done\n");
-    free(F); free(log_s); free(log_F);
+    free(F); free(log_s); free(log_F); free(H_fit);
     return 0;
 }
 
@@ -250,34 +267,32 @@ void slice_vec(double *all_vec, double *sliced_vec, int start, int end)
         sliced_vec[i] = all_vec[start+i];
 }
 
-int lin_fit(int L, const double *x, const double *y, double *m, double *q, double *r)
+void polynomialFit(int obs, int degree, double *dx, double *dy, double *store)
 {
-    double sumx = 0.0;
-    double sumx2 = 0.0;
-    double sumxy = 0.0;
-    double sumy = 0.0;
-    double sumy2 = 0.0;
-    for(int i = 0;i < L; i++){
-        sumx += x[i];
-        sumx2 += x[i] * x[i];
-        sumxy += x[i] * y[i];
-        sumy += y[i];
-        sumy2 += y[i] * y[i];
+    gsl_multifit_linear_workspace *ws;
+    gsl_matrix *cov, *X;
+    gsl_vector *y, *c;
+    double chisq;
+    int i, j;
+    //alloc
+    X = gsl_matrix_alloc(obs, degree);
+    y = gsl_vector_alloc(obs);
+    c = gsl_vector_alloc(degree);
+    cov = gsl_matrix_alloc(degree, degree);
+    //computation
+    for(i = 0; i < obs; i++){
+        for(j = 0; j < degree; j++)
+            gsl_matrix_set(X, i, j, pow(dx[i], j));
+        gsl_vector_set(y, i, dy[i]);
     }
-    double denom = (L * sumx2 - sumx * sumx);
-    if(denom == 0){
-        *m = 0;
-        *q = 0;
-        if(r)
-            *r = 0;
-        return 1;
-    }
-    *m = (L * sumxy - sumx * sumy) / denom;
-    *q = (sumy * sumx2 - sumx * sumxy) / denom;
-    if(r != NULL){
-        *r = (sumxy - sumx * sumy / (double)L) /
-              sqrt((sumx2 - (sumx * sumx) / L) *
-              (sumy2 - (sumy * sumy) / L));
-    }
-    return 0;
+    ws = gsl_multifit_linear_alloc(obs, degree);
+    gsl_multifit_linear(X, y, c, cov, &chisq, ws);
+    for(i = 0; i < degree; i++)
+        store[i] = gsl_vector_get(c, i);
+    //free memory
+    gsl_multifit_linear_free(ws);
+    gsl_matrix_free(X);
+    gsl_matrix_free(cov);
+    gsl_vector_free(y);
+    gsl_vector_free(c);
 }

@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <math.h>
 #include <string.h>
+#include <gsl/gsl_multifit.h>
 
 //DEFINES
 #define SUCCESS 1
@@ -15,7 +16,7 @@ int rows_number(char *);
 double mean(double *, int, int);
 void cumsum(double *, double *, int);
 void slice_vec(double *, double *, int, int);
-int lin_fit(int, const double *, const double *, double *, double *, double *);
+void polynomialFit(int obs, int degree, double *dx, double *dy, double *store);
 
 //MAIN
 int main(int argc, char **argv)
@@ -186,7 +187,7 @@ int dcca_comp(double *t, double *y1, double *y2, int N, int min_win_size, int la
 {
     //fluctuations vector and other arrays
     int F_len = N - min_win_size;
-    double *F_nu, *t_fit, *y_fit1, *y_fit2, *diff_vec;
+    double *F_nu, *t_fit, *y_fit1, *y_fit2, *diff_vec, *fit_coeffs1, *fit_coeffs2;
     F_nu = calloc(F_len, sizeof(double));
     if(!F_nu){
         printf("MALLOC ERROR (F_nu)\n");
@@ -212,9 +213,18 @@ int dcca_comp(double *t, double *y1, double *y2, int N, int min_win_size, int la
         printf("MALLOC ERROR (diff_vec)\n");
         return FAILURE;
     }
+    fit_coeffs1 = calloc(ord+1, sizeof(double));
+    if(!fit_coeffs1){
+        printf("MALLOC ERROR (fit_coeffs1)\n");
+        return FAILURE;
+    }
+    fit_coeffs2 = calloc(ord+1, sizeof(double));
+    if(!fit_coeffs2){
+        printf("MALLOC ERROR (fit_coeffs2)\n");
+        return FAILURE;
+    }
     //computation
     int s, N_s, start_lim, end_lim;
-    double ang_coeff1, intercept1, r_coeff1, ang_coeff2, intercept2, r_coeff2;
     for(int i = 0; i < range_dcca; i++){
         double perc = i * 100 / (double)range_dcca;
         int prg = (i * PRG_WIDTH) / range_dcca;
@@ -228,10 +238,15 @@ int dcca_comp(double *t, double *y1, double *y2, int N, int min_win_size, int la
             slice_vec(t, t_fit, start_lim, end_lim);
             slice_vec(y1, y_fit1, start_lim, end_lim);
             slice_vec(y2, y_fit2, start_lim, end_lim);
-            lin_fit(s+1, t_fit, y_fit1, &ang_coeff1, &intercept1, &r_coeff1);
-            lin_fit(s+1, t_fit, y_fit2, &ang_coeff2, &intercept2, &r_coeff2);
-            for(int j = 0; j <= s; j++)
-                diff_vec[j] = (y_fit1[j] - (intercept1 + ang_coeff1 * t_fit[j])) * (y_fit2[j] - (intercept2 + ang_coeff2 * t_fit[j]));
+            polynomialFit(s+1, ord+1, t_fit, y_fit1, fit_coeffs1);
+            polynomialFit(s+1, ord+1, t_fit, y_fit2, fit_coeffs2);
+            for(int j = 0; j <= s; j++){
+                for(int k = 0; k < ord+1; k++){
+                    y_fit1[j] -= fit_coeffs1[k] * pow(t_fit[j], k);
+                    y_fit2[j] -= fit_coeffs2[k] * pow(t_fit[j], k);
+                }
+                diff_vec[j] = y_fit1[j] * y_fit2[j];
+            }
             F_nu[v] = mean(diff_vec, s+1, s-1);
         }
         F[i] = mean(F_nu, N_s, N_s);
@@ -239,7 +254,8 @@ int dcca_comp(double *t, double *y1, double *y2, int N, int min_win_size, int la
     printf(" [%s] 100.00%%\r", PROGRESS);
     fflush(stdout);
     printf("\n");
-    free(F_nu); free(t_fit); free(y_fit1); free(y_fit2); free(diff_vec);
+    free(F_nu); free(t_fit); free(y_fit1); free(y_fit2);
+    free(diff_vec); free(fit_coeffs1); free(fit_coeffs2);
     return SUCCESS;
 }
 
@@ -284,34 +300,32 @@ void slice_vec(double *all_vec, double *sliced_vec, int start, int end)
         sliced_vec[i] = all_vec[start+i];
 }
 
-int lin_fit(int L, const double *x, const double *y, double *m, double *q, double *r)
+void polynomialFit(int obs, int degree, double *dx, double *dy, double *store)
 {
-    double sumx = 0.0;
-    double sumx2 = 0.0;
-    double sumxy = 0.0;
-    double sumy = 0.0;
-    double sumy2 = 0.0;
-    for(int i = 0; i < L; i++){
-        sumx += *(x + i);
-        sumx2 += *(x + i) * *(x + i);
-        sumxy += *(x + i) * *(y + i);
-        sumy += *(y + i);
-        sumy2 += *(y + i) * *(y + i);
+    gsl_multifit_linear_workspace *ws;
+    gsl_matrix *cov, *X;
+    gsl_vector *y, *c;
+    double chisq;
+    int i, j;
+    //alloc
+    X = gsl_matrix_alloc(obs, degree);
+    y = gsl_vector_alloc(obs);
+    c = gsl_vector_alloc(degree);
+    cov = gsl_matrix_alloc(degree, degree);
+    //computation
+    for(i = 0; i < obs; i++){
+        for(j = 0; j < degree; j++)
+            gsl_matrix_set(X, i, j, pow(dx[i], j));
+        gsl_vector_set(y, i, dy[i]);
     }
-    double denom = (L * sumx2 - sumx * sumx);
-    if(denom == 0){
-        *m = 0;
-        *q = 0;
-        if(r)
-            *r = 0;
-        return 1;
-    }
-    *m = (L * sumxy - sumx * sumy) / denom;
-    *q = (sumy * sumx2 - sumx * sumxy) / denom;
-    if(r != NULL){
-        *r = (sumxy - sumx * sumy / (double)L) /
-              sqrt((sumx2 - (sumx * sumx) / L) *
-              (sumy2 - (sumy * sumy) / L));
-    }
-    return 0;
+    ws = gsl_multifit_linear_alloc(obs, degree);
+    gsl_multifit_linear(X, y, c, cov, &chisq, ws);
+    for(i = 0; i < degree; i++)
+        store[i] = gsl_vector_get(c, i);
+    //free memory
+    gsl_multifit_linear_free(ws);
+    gsl_matrix_free(X);
+    gsl_matrix_free(cov);
+    gsl_vector_free(y);
+    gsl_vector_free(c);
 }
