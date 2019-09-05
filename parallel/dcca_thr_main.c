@@ -3,12 +3,20 @@
 int main(int argc, char **argv)
 {
     //args
-    int L = atoi(argv[1]);
-    int min_win = atoi(argv[2]);
-    int max_win = atoi(argv[3]);
-    int pol = atoi(argv[4]);
-    int N_iter = atoi(argv[5]);
-    double conf_lim = atof(argv[6]);
+    int input_args = 6;
+    if(argc < input_args){
+        printf("Not enough input arguments!\n");
+        return 99;
+    }else if(argc > input_args){
+        printf("Too many input arguments!\n");
+        return 99;
+    }
+    int L = atoi(argv[1]);//length of the thresholds
+    int min_win = atoi(argv[2]);//size of the first scale
+    int max_win = atoi(argv[3]);//number of windows with the size of the last scale
+    int N_iter = atoi(argv[4]);//number of simulations
+    double conf_lim = atof(argv[5]);//confidence limit for thresholds
+    int pol = 1;//fixing polynomial order
     //MPI inizialization
     MPI_Init(NULL, NULL);
     int rank, size;
@@ -34,8 +42,10 @@ int main(int argc, char **argv)
     //seed for random vectors
     srand48(time(0));
     for(int i = 0; i < N_iter; i++){
-        if(rank == 0)
-            printf("Simulation number %d\n", i);
+        if(rank == 0){
+            printf("Simulation number %d / %d\r", i+1, N_iter);
+            fflush(stdout);
+        }
         gauss_rand_vec(L, vec1, 0, 1);
         gauss_rand_vec(L, vec2, 0, 1);
         dcca(vec1, L, vec2, L, min_win, max_win, pol, "rho.txt", rank, size);
@@ -46,6 +56,7 @@ int main(int argc, char **argv)
     free(vec1); free(vec2);
     //thresholds
     if(rank == 0){
+        printf("\n");
         system("rm rho.txt");
         up_down_lims("rho_mtx.txt", N_iter, conf_lim);
         system("rm rho_mtx.txt");
