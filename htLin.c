@@ -14,9 +14,9 @@ int rows_number(char *);
 double mean(double *, int);
 void cumsum(double *, double *, int);
 void slice_vec(double *, double *, int, int);
-
+int lin_fit(int, const double *, const double *, double *, double *);
 int get_num_elements(char *, char);
-int get_scales_vec(char *scales_str, char *del, int *scales_vec, int pol_deg);
+int get_scales_vec(char *, char *, int *, int);
 
 //MAIN
 int main(int argc, char **argv)
@@ -343,7 +343,30 @@ void slice_vec(double *all_vec, double *sliced_vec, int start, int end)
         sliced_vec[i] = all_vec[start+i];
 }
 
-
+int lin_fit(int L, const double *x, const double *y, double *m, double *q)
+{
+    double sumx = 0.0;
+    double sumx2 = 0.0;
+    double sumxy = 0.0;
+    double sumy = 0.0;
+    double sumy2 = 0.0;
+    for(int i = 0; i < L; i++){
+        sumx += x[i];
+        sumx2 += x[i] * x[i];
+        sumxy += x[i] * y[i];
+        sumy += y[i];
+        sumy2 += y[i] * y[i];
+    }
+    double denom = (L * sumx2 - sumx * sumx);
+    if(denom == 0){
+        *m = 0;
+        *q = 0;
+        return 1;
+    }
+    *m = (L * sumxy - sumx * sumy) / denom;
+    *q = (sumy * sumx2 - sumx * sumxy) / denom;
+    return 0;
+}
 
 int get_num_elements(char *str, char del)
 {
