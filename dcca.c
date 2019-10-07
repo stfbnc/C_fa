@@ -16,7 +16,7 @@ int rows_number(char *);
 double mean(double *, int, int);
 void cumsum(double *, double *, int);
 void slice_vec(double *, double *, int, int);
-void polynomialFit(int obs, int degree, double *dx, double *dy, double *store);
+void polynomialFit(int, int, double *, double *, double *);
 
 //MAIN
 int main(int argc, char **argv)
