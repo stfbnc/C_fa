@@ -22,7 +22,7 @@ int get_scales_vec(char *, char *, int *, int);
 int main(int argc, char **argv)
 {
     //inputs
-    int input_args = 5;
+    int input_args = 4;
     if(argc < input_args){
         printf("Not enough input arguments!\n");
         return FAILURE;
@@ -34,8 +34,8 @@ int main(int argc, char **argv)
     char file_name[255];
     memset(file_name, 0x00, sizeof(file_name));
     sprintf(file_name, "%s", argv[1]);
-    // polynomial order
-    int pol_ord = atoi(argv[3]);
+    // polynomial order fixed to 1
+    int pol_ord = 1;
     //scales are inputed as a string of ints separated by ","
     int num_elem = get_num_elements(argv[2], ',');
     if(num_elem == FAILURE){
@@ -57,7 +57,7 @@ int main(int argc, char **argv)
         // path where to save results file
         char path_tot[255];
         memset(path_tot, 0x00, sizeof(path_tot));
-        sprintf(path_tot, "%s", argv[4]);
+        sprintf(path_tot, "%s", argv[3]);
         //file length
         int N = rows_number(file_name);
         if(N == FAILURE){
@@ -128,6 +128,7 @@ int main(int argc, char **argv)
         //Fluctuations at q = 0
         printf("Computing fluctuations at q=0...");
         int num_seg, start_lim, end_lim;
+	double ang_coeff, intercept;
         double *t_fit, *X_fit, *diff_vec, *RMS0, *Fq0, *fit_coeffs0;
         int flctLen = N / scmin;
         t_fit = calloc(scmax, sizeof(double));
@@ -167,12 +168,9 @@ int main(int argc, char **argv)
                 end_lim = (v + 1) * scale0[i];
                 slice_vec(t, t_fit, start_lim, end_lim);
                 slice_vec(X, X_fit, start_lim, end_lim);
-                polynomialFit(scale0[i], pol_ord+1, t_fit, X_fit, fit_coeffs0);
-                for(int j = 0; j < scale0[i]; j++){
-                    for(int k = 0; k < pol_ord+1; k++)
-                        X_fit[j] -= fit_coeffs0[k] * pow(t_fit[j], k);
-                    diff_vec[j] = pow(X_fit[j], 2.0);
-                }
+                lin_fit(scale0[i], t_fit, X_fit, &ang_coeff, &intercept);
+                for(int j = 0; j < scale0[i]; j++)
+                    diff_vec[j] = pow(X_fit[j]-(intercept+ang_coeff*t_fit[j]), 2.0);
                 RMS0[v] = log(mean(diff_vec, scale0[i]));
             }
             Fq0[i] = exp(0.5 * mean(RMS0, num_seg));
@@ -182,6 +180,7 @@ int main(int argc, char **argv)
         for(int i = 0; i < num_elem; i++){
             int scale = scales[i];
             int HtLen = N - scale + 1;
+	    double ang_coeff, intercept;
             double *X_fitH, *t_fitH, *diff_vecH, *RMS, *fit_coeffs;
             X_fitH = calloc(scale, sizeof(double));
             if(!X_fitH){
@@ -218,12 +217,9 @@ int main(int argc, char **argv)
                 for(int j = 0; j < scale; j++)
                     t_fitH[j] = (double)(start_lim+j);
                 slice_vec(X, X_fitH, start_lim, end_lim);
-                polynomialFit(scale, pol_ord+1, t_fitH, X_fitH, fit_coeffs);
-                for(int j = 0; j < scale; j++){
-                    for(int k = 0; k < pol_ord+1; k++)
-                        X_fitH[j] -= fit_coeffs[k] * pow(t_fitH[j], k);
-                    diff_vecH[j] = pow(X_fitH[j], 2.0);
-                }
+                lin_fit(scale, t_fitH, X_fitH, &ang_coeff, &intercept);
+                for(int j = 0; j < scale; j++)
+                    diff_vecH[j] = pow(X_fitH[j]-(intercept+ang_coeff*t_fitH[j]), 2.0);
                 RMS[v] = sqrt(mean(diff_vecH, scale));
             }
             printf("Computing fluctuations at scale <%d> => [%s] 100.00%%\r", scale, PROGRESS);
@@ -277,7 +273,7 @@ int main(int argc, char **argv)
             printf("Output file for scale <%d>...", scale);
             char path_file[300];
             memset(path_file, 0x00, sizeof(path_file));
-            sprintf(path_file, "%s/Ht_scale=%d_pol=%d.txt", path_tot, scale, pol_ord);
+            sprintf(path_file, "%s/Ht_scale=%d.txt", path_tot, scale);
             f = fopen(path_file, "w");
             if(!f){
                 printf("Cannot open output file.\n");
