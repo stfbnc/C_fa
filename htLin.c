@@ -128,7 +128,7 @@ int main(int argc, char **argv)
         //Fluctuations at q = 0
         printf("Computing fluctuations at q=0...");
         int num_seg, start_lim, end_lim;
-	double ang_coeff, intercept;
+		double ang_coeff, intercept;
         double *t_fit, *X_fit, *diff_vec, *RMS0, *Fq0, *fit_coeffs0;
         int flctLen = N / scmin;
         t_fit = calloc(scmax, sizeof(double));
@@ -180,7 +180,7 @@ int main(int argc, char **argv)
         for(int i = 0; i < num_elem; i++){
             int scale = scales[i];
             int HtLen = N - scale + 1;
-	    double ang_coeff, intercept;
+	   		double ang_coeff, intercept;
             double *X_fitH, *t_fitH, *diff_vecH, *RMS, *fit_coeffs;
             X_fitH = calloc(scale, sizeof(double));
             if(!X_fitH){
@@ -227,7 +227,8 @@ int main(int argc, char **argv)
             printf("\n");
             //local hurst exponent
             printf("Computing local hurst exponent at scale <%d>...", scale);
-            double *log_scale0, *log_Fq0, *Hq0_fit;
+            double *log_scale0, *log_Fq0;
+			double Hq0_intercept, Hq0;
             log_scale0 = calloc(range0, sizeof(double));
             if(!log_scale0){
                 printf("MALLOC ERROR (log_scale0)\n");
@@ -238,20 +239,13 @@ int main(int argc, char **argv)
                 printf("MALLOC ERROR (log_Fq0)\n");
                 return FAILURE;
             }
-            Hq0_fit = calloc(2, sizeof(double));
-            if(!Hq0_fit){
-                printf("MALLOC ERROR (Hq0_fit)\n");
-                return FAILURE;
-            }
             for(int i = 0; i < range0; i++){
                 log_scale0[i] = log(scale0[i]);
                 log_Fq0[i] = log(Fq0[i]);
             }
-            polynomialFit(range0, 2, log_scale0, log_Fq0, Hq0_fit);
+            lin_fit(range0, log_scale0, log_Fq0, &Hq0, &Hq0_intercept);
             double Regfit, logscale;
             double *resRMS, *Ht;
-            double Hq0_intercept = Hq0_fit[0];
-            double Hq0 = Hq0_fit[1];
             Regfit = Hq0_intercept + Hq0 * log(scale);
             logscale = log(HtLen) - log(scale);
             resRMS = calloc(HtLen, sizeof(double));
@@ -286,7 +280,7 @@ int main(int argc, char **argv)
             //free memory
             free(X_fitH); free(t_fitH); free(diff_vecH);
             free(RMS); free(fit_coeffs); free(log_scale0);
-            free(log_Fq0); free(resRMS); free(Ht); free(Hq0_fit);
+            free(log_Fq0); free(resRMS); free(Ht);
         }
         //free memory
         free(scales); free(pn); free(t);
